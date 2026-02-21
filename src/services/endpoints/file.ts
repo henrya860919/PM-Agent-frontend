@@ -1,5 +1,11 @@
 // src/services/endpoints/file.ts
-import type { FileListResponse, FileRecord, FileUploadResponse } from '@/types/file';
+import type {
+  FileAnalysisResponse,
+  FileListResponse,
+  FileProcessingStatusResponse,
+  FileTranscriptResponse,
+  FileUploadResponse,
+} from '@/types/file';
 import apiClient from '../client';
 
 export const fileApi = {
@@ -61,5 +67,57 @@ export const fileApi = {
    */
   async delete(fileId: string): Promise<void> {
     await apiClient.delete(`/files/${fileId}`);
+  },
+
+  /**
+   * 取得處理狀態（轉錄/分析）
+   * GET /files/{fileId}/processing-status
+   */
+  async getProcessingStatus(fileId: string): Promise<FileProcessingStatusResponse> {
+    const { data } = await apiClient.get<{
+      success: boolean;
+      data: FileProcessingStatusResponse;
+    }>(`/files/${fileId}/processing-status`);
+    return data.data;
+  },
+
+  /**
+   * 取得轉錄
+   * GET /files/{fileId}/transcript
+   */
+  async getTranscript(fileId: string): Promise<FileTranscriptResponse | null> {
+    try {
+      const res = await apiClient.get<{
+        success: boolean;
+        data: FileTranscriptResponse;
+      }>(`/files/${fileId}/transcript`);
+      return res.data.data ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 取得分析（含 logic flags）
+   * GET /files/{fileId}/analysis
+   */
+  async getAnalysis(fileId: string): Promise<FileAnalysisResponse | null> {
+    try {
+      const res = await apiClient.get<{
+        success: boolean;
+        data: FileAnalysisResponse;
+      }>(`/files/${fileId}/analysis`);
+      return res.data.data ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 手動觸發處理（僅音檔）
+   * POST /files/{fileId}/process
+   */
+  async triggerProcess(fileId: string): Promise<void> {
+    await apiClient.post(`/files/${fileId}/process`);
   },
 };

@@ -128,6 +128,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import apiClient from '@/services/client';
 import { fileApi } from '@/services/endpoints/file';
 import type { FileRecord } from '@/types/file';
 import { usePMDashboardStore } from '@/stores/pm-dashboard';
@@ -230,17 +231,34 @@ async function loadFiles() {
   }
 }
 
-// 預覽檔案
-function handlePreview(file: FileRecord) {
-  window.open(file.url, '_blank');
+// API 路徑轉成 client 用的路徑（後端回傳 /api/files/xxx，baseURL 已含 /api，故取 /files/xxx）
+function getFileApiPath(file: FileRecord): string {
+  return file.url.replace(/^\/api/, '') || file.url;
 }
 
-// 下載檔案
-function handleDownload(file: FileRecord) {
-  const link = document.createElement('a');
-  link.href = `${file.url}?download=true`;
-  link.download = file.originalFilename;
-  link.click();
+// 預覽檔案（用完整 API URL 開新分頁，避免打到 Vite 造成 404）
+function handlePreview(file: FileRecord) {
+  const url = apiClient.defaults.baseURL
+    ? `${apiClient.defaults.baseURL.replace(/\/api\/?$/, '')}${file.url}`
+    : file.url;
+  window.open(url, '_blank');
+}
+
+// 下載檔案：用 API client 打後端取 blob，再觸發下載（避免用相對路徑打到前端造成 412 等錯誤檔）
+async function handleDownload(file: FileRecord) {
+  try {
+    const path = `${getFileApiPath(file)}?download=true`;
+    const res = await apiClient.get(path, { responseType: 'blob' });
+    const blob = res.data as Blob;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.originalFilename;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('Download failed:', err);
+  }
 }
 
 // 監聽搜尋和類型篩選變化

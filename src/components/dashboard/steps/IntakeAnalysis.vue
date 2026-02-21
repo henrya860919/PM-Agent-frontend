@@ -1,6 +1,46 @@
 <template>
   <ScrollArea class="h-full">
     <div class="flex flex-col gap-6 p-6">
+      <!-- 開發者模式：模擬音檔（僅開發環境顯示） -->
+      <section
+        v-if="devModeAvailable"
+        class="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-xs font-medium text-foreground">開發者模式</p>
+            <p class="mt-0.5 text-[10px] text-muted-foreground">
+              開啟後音檔將使用假轉錄／假分析，不呼叫 Whisper／Claude，不花 API 額度
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="mockAudioEnabled"
+            aria-label="開啟或關閉模擬音檔處理"
+            :class="
+              cn(
+                'relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                mockAudioEnabled ? 'bg-primary' : 'bg-input',
+              )
+            "
+            @click="toggleMockAudio"
+          >
+            <span
+              :class="
+                cn(
+                  'pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
+                  mockAudioEnabled ? 'translate-x-5' : 'translate-x-0.5',
+                )
+              "
+            />
+          </button>
+        </div>
+        <p v-if="mockAudioEnabled" class="mt-2 text-[10px] text-amber-600 dark:text-amber-400">
+          目前為模擬模式，上傳音檔不會呼叫 OpenAI / Anthropic
+        </p>
+      </section>
+
       <!-- Upload Section -->
       <section>
         <h3 class="mb-1 text-sm font-semibold text-foreground">Upload Files</h3>
@@ -54,6 +94,19 @@
             <div class="flex-1 min-w-0">
               <p class="truncate text-xs font-medium text-foreground">{{ file.name }}</p>
               <p class="text-[10px] text-muted-foreground">{{ file.size }}</p>
+              <p
+                v-if="file.status === 'processing' && file.processingStep"
+                class="mt-0.5 text-[10px] text-primary"
+              >
+                {{ file.processingStep }}
+              </p>
+              <p
+                v-if="file.status === 'error' && file.errorMessage"
+                class="mt-0.5 text-[10px] text-destructive max-w-[200px] truncate"
+                :title="file.errorMessage"
+              >
+                {{ file.errorMessage }}
+              </p>
               <div v-if="file.status === 'uploading'" class="mt-1 h-1 w-full overflow-hidden rounded-full bg-card">
                 <div
                   class="h-full rounded-full bg-primary transition-all"
@@ -61,12 +114,13 @@
                 />
               </div>
             </div>
-            <div class="shrink-0">
+            <div class="shrink-0 flex items-center gap-1.5">
               <span v-if="file.status === 'uploading'" class="text-[10px] text-muted-foreground">
                 {{ Math.round(file.progress) }}%
               </span>
               <Loader2 v-if="file.status === 'processing'" class="h-4 w-4 animate-spin text-primary" />
               <CheckCircle2 v-if="file.status === 'ready'" class="h-4 w-4 text-primary" />
+              <AlertTriangle v-if="file.status === 'error'" class="h-4 w-4 text-destructive" />
             </div>
             <button
               @click.stop="removeFile(file.id)"
@@ -97,7 +151,7 @@
         </div>
         <Textarea
           v-if="showTranscript"
-          :value="DEMO_TRANSCRIPT"
+          :value="displayTranscript"
           readonly
           class="min-h-[180px] resize-none bg-secondary text-xs font-mono leading-relaxed border-none text-secondary-foreground"
         />
@@ -171,6 +225,8 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { usePMDashboardStore } from '@/stores/pm-dashboard';
+import { fileApi } from '@/services/endpoints/file';
+import { devApi } from '@/services/endpoints/dev';
 import { uploadFile } from '@/utils/upload';
 import { FILE_BUSINESS_TYPE } from '@/constants/file';
 import type { UploadedFile, LogicFlag, LogicFlagCategory, LogicFlagSeverity } from '@/types/pm-dashboard';
@@ -186,19 +242,32 @@ const isDragging = ref<boolean>(false);
 const showTranscript = ref<boolean>(true);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 
-const DEMO_TRANSCRIPT = `Meeting Transcript - Stakeholder Review (Feb 12, 2026)
+const devModeAvailable = ref<boolean>(false);
+const mockAudioEnabled = ref<boolean>(false);
 
-[00:00] Sarah (PM): Let's start with the checkout redesign priorities.
+onMounted(async () => {
+  const res = await devApi.getMockAudio();
+  if (res != null) {
+    devModeAvailable.value = true;
+    mockAudioEnabled.value = res.enabled;
+  }
+});
 
-[01:23] Mike (Engineering): We need to decide on the payment gateway first. The current Stripe integration has rate limiting issues at scale.
+async function toggleMockAudio(): Promise<void> {
+  const next = !mockAudioEnabled.value;
+  const res = await devApi.setMockAudio(next);
+  if (res != null) {
+    mockAudioEnabled.value = res.enabled;
+  }
+}
 
-[03:45] Sarah: Good point. Let's also discuss the user role permissions for the admin panel. Currently, there's no RBAC defined.
+const POLL_INTERVAL_MS = 2500;
+const MAX_POLL_ATTEMPTS = 120; // 5 min
 
-[05:12] Lisa (Design): The export functionality needs clarity - are we doing CSV, PDF, or both? The current implementation only supports JSON.
-
-[07:30] Mike: Also, the team hierarchy is complex. Nested teams could create recursive permission lookups if we're not careful.
-
-[09:15] Sarah: Let's flag all of these. I want the PM agent to track these as potential risks.`;
+const displayTranscript = computed(() => {
+  const t = store.transcript?.trim();
+  return t || '上傳音檔後將自動轉錄，完成後會顯示於此。';
+});
 
 const categoryIcons: Record<LogicFlagCategory, any> = {
   permissions: ShieldAlert,
@@ -244,8 +313,7 @@ async function simulateUpload(file: File): Promise<void> {
   store.addFile(newFile);
 
   try {
-    // 上傳檔案到後端
-    await uploadFile({
+    const result = await uploadFile({
       file,
       businessType: FILE_BUSINESS_TYPE.PROJECT_DOCUMENT,
       projectId: store.selectedProjectId || undefined,
@@ -254,19 +322,117 @@ async function simulateUpload(file: File): Promise<void> {
       },
     });
 
-    // 上傳成功
-    store.updateFile(id, { progress: 100, status: 'processing' });
-    
-    // 模擬處理時間
-    setTimeout(() => {
-      store.updateFile(id, { status: 'ready' });
-      emit('file-processed', `Transcript from ${file.name}: Key discussion points identified.`, file.name);
-    }, 1500);
+    store.updateFile(id, {
+      progress: 100,
+      fileId: result.id,
+      status: isAudio ? 'processing' : 'ready',
+    });
+
+    if (isAudio && result.id) {
+      pollForProcessing(id, result.id, file.name);
+    } else {
+      emit('file-processed', `Uploaded: ${file.name}`, file.name);
+    }
   } catch (error) {
-    // 上傳失敗
     store.updateFile(id, { status: 'error' });
     console.error('Upload failed:', error);
   }
+}
+
+function getProcessingStepLabel(status: {
+  transcriptStatus: string;
+  analysisStatus: string;
+}): string {
+  if (status.transcriptStatus !== 'completed') {
+    return '轉錄中 (1/2)';
+  }
+  if (
+    status.analysisStatus === 'not_started' ||
+    status.analysisStatus === 'processing'
+  ) {
+    return '分析中 (2/2)';
+  }
+  return '處理中…';
+}
+
+async function pollForProcessing(
+  frontendFileId: string,
+  backendFileId: string,
+  fileName: string,
+): Promise<void> {
+  let attempts = 0;
+  const poll = async (): Promise<void> => {
+    attempts += 1;
+    if (attempts > MAX_POLL_ATTEMPTS) {
+      store.updateFile(frontendFileId, {
+        status: 'error',
+        errorMessage: '處理逾時，請稍後重試',
+      });
+      return;
+    }
+    try {
+      const status = await fileApi.getProcessingStatus(backendFileId);
+      const stepLabel = getProcessingStepLabel(status);
+      store.updateFile(frontendFileId, { processingStep: stepLabel });
+
+      if (status.overall === 'completed') {
+        const [transcriptRes, analysisRes] = await Promise.all([
+          fileApi.getTranscript(backendFileId),
+          fileApi.getAnalysis(backendFileId),
+        ]);
+        if (transcriptRes?.transcript) {
+          store.setTranscript(transcriptRes.transcript);
+        }
+        if (analysisRes?.logicFlags?.length) {
+          store.setLogicFlags(
+            analysisRes.logicFlags.map((f) => ({
+              id: f.id,
+              category: f.category as LogicFlag['category'],
+              severity: f.severity as LogicFlag['severity'],
+              message: f.message,
+              source: f.source,
+            })),
+          );
+        } else {
+          store.setLogicFlags([]);
+        }
+        store.updateFile(frontendFileId, {
+          status: 'ready',
+          processingStep: undefined,
+        });
+        emit('file-processed', `Transcript from ${fileName}: analysis ready.`, fileName);
+        return;
+      }
+      if (status.overall === 'failed') {
+        const msg =
+          status.transcriptErrorMessage ||
+          status.analysisErrorMessage ||
+          '轉錄或分析失敗';
+        store.updateFile(frontendFileId, {
+          status: 'error',
+          errorMessage: msg,
+          processingStep: undefined,
+        });
+        // 轉錄可能已成功、僅分析失敗，仍取轉錄讓使用者能看到 Whisper 結果
+        if (status.transcriptStatus === 'completed') {
+          try {
+            const transcriptRes = await fileApi.getTranscript(backendFileId);
+            if (transcriptRes?.transcript) {
+              store.setTranscript(transcriptRes.transcript);
+            }
+          } catch {
+            // 忽略
+          }
+        }
+        return;
+      }
+    } catch {
+      // 繼續輪詢，保留目前 processingStep
+    }
+    setTimeout(poll, POLL_INTERVAL_MS);
+  };
+  store.updateFile(frontendFileId, { processingStep: '轉錄中 (1/2)' });
+  setTimeout(poll, POLL_INTERVAL_MS);
 }
 
 function handleDrop(e: DragEvent): void {
@@ -290,38 +456,4 @@ function removeFile(id: string): void {
   store.removeFile(id);
 }
 
-// Initialize demo logic flags
-onMounted(() => {
-  const demoFlags: LogicFlag[] = [
-    {
-      id: 'f1',
-      category: 'permissions',
-      severity: 'critical',
-      message: 'Role-based access control not defined for admin panel routes',
-      source: 'Stakeholder Meeting Transcript',
-    },
-    {
-      id: 'f2',
-      category: 'import-export',
-      severity: 'warning',
-      message: 'CSV export format unspecified; may conflict with existing integrations',
-      source: 'Stakeholder Meeting Transcript',
-    },
-    {
-      id: 'f3',
-      category: 'hierarchy',
-      severity: 'warning',
-      message: 'Nested team structures may cause recursive permission checks',
-      source: 'Tech Review Notes',
-    },
-    {
-      id: 'f4',
-      category: 'data-flow',
-      severity: 'info',
-      message: 'Real-time sync between dashboard and mobile app not addressed',
-      source: 'Stakeholder Meeting Transcript',
-    },
-  ];
-  store.setLogicFlags(demoFlags);
-});
 </script>

@@ -19,6 +19,7 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
   const messages = ref<ChatMessage[]>([]);
   const isLoading = ref<boolean>(false);
   const files = ref<UploadedFile[]>([]);
+  const transcript = ref<string>('');
   const logicFlags = ref<LogicFlag[]>([]);
 
   const projectStore = useProjectStore();
@@ -116,6 +117,10 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     logicFlags.value = flags;
   }
 
+  function setTranscript(text: string): void {
+    transcript.value = text;
+  }
+
   return {
     // State
     selectedProjectId,
@@ -124,6 +129,7 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     messages,
     isLoading,
     files,
+    transcript,
     logicFlags,
     projects,
     // Computed
@@ -138,6 +144,7 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     updateFile,
     removeFile,
     setLogicFlags,
+    setTranscript,
     initializeProjects,
   };
 });
