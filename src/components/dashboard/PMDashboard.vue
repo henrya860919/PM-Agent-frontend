@@ -1,3 +1,4 @@
+<!-- src/components/dashboard/PMDashboard.vue -->
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-background">
     <!-- Sidebar -->
