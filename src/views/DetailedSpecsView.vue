@@ -1,9 +1,8 @@
 <template>
-  <div class="h-full flex items-center justify-center text-muted-foreground">
+  <div class="h-full">
     <p>Detailed Specs - Coming soon</p>
   </div>
 </template>
 
 <script setup lang="ts">
-// Detailed Specs view
 </script>

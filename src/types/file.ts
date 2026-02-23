@@ -15,6 +15,8 @@ export type FileRecord = {
   createdAt: string;
   url: string;
   thumbnailUrl?: string;
+  /** 是否已有分析（Intake） */
+  hasAnalyzed?: boolean;
 };
 
 export type FileListResponse = {

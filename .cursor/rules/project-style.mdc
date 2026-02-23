@@ -1,0 +1,25 @@
+---
+description: PM-Agent 前端專案架構與 UI 規範
+alwaysApply: true
+---
+
+# PM-Agent 前端專案規範
+
+完整說明見 **docs/PROJECT_STYLE_GUIDE.md**。摘要：
+
+## UI 元件（shadcn-vue）
+
+- **僅**在 `src/components/ui/` 新增基礎 UI；新元件用 `npx shadcn-vue@latest add <name>`。
+- **按需引用**：在使用的檔案中 `import { Button } from '@/components/ui/button'` 等，路徑一律**小寫**（`@/components/ui/button`、`dialog`、`input`）。
+- **禁止**在 main.ts 或 plugin 全域註冊 UI 元件。
+- 需要新 UI 時，先查 [shadcn-vue 元件](https://www.shadcn-vue.com/docs/components)，有合適的用 CLI 安裝，勿自己實作。
+
+## 目錄
+
+- **components**：只放跨頁面重複使用的元件（`ui/`、`layout/`）。單頁專用的 Dialog、Panel、步驟等 → 放 **views**。
+- **views**：每頁一個資料夾或單檔；主頁檔名 `XxxView.vue`；該頁專用子元件放在同資料夾（可再分子資料夾），檔名結尾與元件名一致（如 `XxxDialog.vue`、`ChatPanel.vue`）。
+- 工具與類名合併 → `cn()` 從 `@/lib/utils` 引入。
+
+## 技術
+
+Vue 3 Composition API + `<script setup lang="ts">`，型別放 `src/types/`，API 封裝在 `src/services/`。

@@ -1,6 +1,6 @@
 <template>
   <aside class="flex h-full w-60 flex-col border-r border-border bg-sidebar">
-    <!-- Header -->
+    <!-- Logo / Brand -->
     <div class="flex items-center gap-2.5 border-b border-border px-4 py-3">
       <div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
         <Hexagon class="h-4 w-4 text-primary-foreground" />
@@ -87,17 +87,17 @@
       </Dialog>
     </div>
 
-    <!-- Projects List -->
+    <!-- Projects：每個專案可展開，下方為 Workspace / File Records / Feature List / Detailed Specs -->
     <nav class="flex-1 overflow-y-auto px-2 pb-2" aria-label="Project navigation">
       <p class="mb-1 px-2 pt-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
         Projects
       </p>
-
       <ul class="flex flex-col gap-0.5" role="list">
         <li v-for="project in filteredProjects" :key="project.id">
+          <!-- 專案列：點擊展開/收合，並選中此專案 -->
           <div class="group relative">
             <button
-              @click="handleProjectClick(project.id)"
+              @click="handleProjectRowClick(project.id)"
               :class="
                 cn(
                   'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors',
@@ -149,26 +149,27 @@
             </div>
           </div>
 
-          <!-- Project Views (sub-nav) -->
+          <!-- 展開後：Workspace、File Records、Feature List、Detailed Specs（對應 src/views 頁面） -->
           <ul
-            v-if="isExpanded(project.id) && isSelected(project.id)"
+            v-if="isExpanded(project.id)"
             class="ml-5 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-3"
           >
-            <li v-for="view in PROJECT_VIEWS" :key="view.id">
-              <button
-                @click="handleViewClick(view.id)"
+            <li v-for="item in PROJECT_VIEW_ITEMS" :key="item.id">
+              <RouterLink
+                :to="item.path"
+                @click="handleViewClick(project.id)"
                 :class="
                   cn(
                     'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors',
-                    isActiveView(view.id)
-                      ? 'bg-primary/10 text-primary'
+                    isActive(item.path)
+                      ? 'bg-primary/10 text-primary font-medium'
                       : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
                   )
                 "
               >
-                <component :is="view.icon" class="h-3 w-3 shrink-0" />
-                <span class="truncate">{{ view.label }}</span>
-              </button>
+                <component :is="item.icon" class="h-3 w-3 shrink-0" />
+                <span class="truncate">{{ item.label }}</span>
+              </RouterLink>
             </li>
           </ul>
         </li>
@@ -189,6 +190,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
 import {
   FolderKanban,
   Plus,
@@ -218,7 +220,7 @@ import {
 } from '@/components/ui/dialog';
 import { usePMDashboardStore } from '@/stores/pm-dashboard';
 import { useProjectStore } from '@/stores/project';
-import type { ProjectView, ProjectStatus as PMDashboardProjectStatus } from '@/types/pm-dashboard';
+import type { ProjectStatus as PMDashboardProjectStatus } from '@/types/pm-dashboard';
 import type {
   CreateProjectRequest,
   ProjectListItem,
@@ -226,23 +228,10 @@ import type {
   ProjectStatus,
 } from '@/types/project';
 
-interface Props {
-  selectedProjectId: string;
-  activeView: ProjectView;
-}
-
-interface Emits {
-  (e: 'select-project', id: string): void;
-  (e: 'select-view', view: ProjectView): void;
-}
-
-const props = defineProps<Props>();
-const emit = defineEmits<Emits>();
-
+const route = useRoute();
 const store = usePMDashboardStore();
 const projectStore = useProjectStore();
 
-const expandedProjects = ref<Set<string>>(new Set(['1']));
 const searchQuery = ref<string>('');
 const showCreateDialog = ref(false);
 const isSubmitting = ref(false);
@@ -258,12 +247,16 @@ const form = reactive<CreateProjectRequest & UpdateProjectRequest>({
   expectedEndDate: '',
 });
 
-const PROJECT_VIEWS: { id: ProjectView; label: string; icon: any }[] = [
-  { id: 'workspace', label: 'Workspace', icon: LayoutDashboard },
-  { id: 'file-records', label: 'File Records', icon: Archive },
-  { id: 'feature-list', label: 'Feature List', icon: ListChecks },
-  { id: 'detailed-specs', label: 'Detailed Specs', icon: Layers },
-];
+/** 每個專案展開後底下的功能，對應 src/views 的頁面 */
+const PROJECT_VIEW_ITEMS = [
+  { id: 'workspace', path: '/workspace', label: 'Workspace', icon: LayoutDashboard },
+  { id: 'file-records', path: '/file-records', label: 'File Records', icon: Archive },
+  { id: 'feature-list', path: '/feature-list', label: 'Feature List', icon: ListChecks },
+  { id: 'detailed-specs', path: '/detailed-specs', label: 'Detailed Specs', icon: Layers },
+] as const;
+
+/** 已展開的專案 ID 集合 */
+const expandedProjects = ref<Set<string>>(new Set());
 
 const statusColors: Record<PMDashboardProjectStatus, string> = {
   active: 'bg-primary',
@@ -271,47 +264,53 @@ const statusColors: Record<PMDashboardProjectStatus, string> = {
   archived: 'bg-muted-foreground/40',
 };
 
-// 整合後端專案資料
-const filteredProjects = computed(() => {
-  // 直接使用後端專案資料
-  return projectStore.projects.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.value.toLowerCase()),
-  );
-});
+function isActive(path: string): boolean {
+  return route.path === path || route.path.startsWith(path + '/');
+}
 
-// 載入專案列表
+const filteredProjects = computed(() =>
+  projectStore.projects.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.value.toLowerCase()),
+  ),
+);
+
 onMounted(async () => {
   await store.initializeProjects();
   await projectStore.fetchProjects();
+  // 若有選中的專案，預設展開該專案
+  if (store.selectedProjectId) {
+    expandedProjects.value.add(store.selectedProjectId);
+  } else if (projectStore.projects.length > 0) {
+    const firstId = projectStore.projects[0].id;
+    expandedProjects.value.add(firstId);
+    store.setSelectedProjectId(firstId);
+  }
 });
 
-function isExpanded(id: string): boolean {
-  return expandedProjects.value.has(id);
+function isExpanded(projectId: string): boolean {
+  return expandedProjects.value.has(projectId);
+}
+
+function toggleExpand(projectId: string): void {
+  const next = new Set(expandedProjects.value);
+  if (next.has(projectId)) next.delete(projectId);
+  else next.add(projectId);
+  expandedProjects.value = next;
 }
 
 function isSelected(id: string): boolean {
-  return props.selectedProjectId === id;
+  return store.selectedProjectId === id;
 }
 
-function isActiveView(viewId: ProjectView): boolean {
-  return props.activeView === viewId;
+/** 點擊專案列：展開/收合 + 選中此專案 */
+function handleProjectRowClick(projectId: string): void {
+  toggleExpand(projectId);
+  store.setSelectedProjectId(projectId);
 }
 
-function toggleProject(id: string): void {
-  if (expandedProjects.value.has(id)) {
-    expandedProjects.value.delete(id);
-  } else {
-    expandedProjects.value.add(id);
-  }
-}
-
-function handleProjectClick(id: string): void {
-  emit('select-project', id);
-  toggleProject(id);
-}
-
-function handleViewClick(viewId: ProjectView): void {
-  emit('select-view', viewId);
+/** 點擊底下的功能連結時，選中該專案（導向頁面由 RouterLink 處理） */
+function handleViewClick(projectId: string): void {
+  store.setSelectedProjectId(projectId);
 }
 
 function mapProjectStatus(status: string): PMDashboardProjectStatus {
@@ -324,42 +323,24 @@ function mapProjectStatus(status: string): PMDashboardProjectStatus {
   return statusMap[status] || 'active';
 }
 
-function mapPMDashboardStatusToProjectStatus(status: PMDashboardProjectStatus): ProjectStatus {
-  const statusMap: Record<PMDashboardProjectStatus, ProjectStatus> = {
-    active: 'in_progress',
-    draft: 'on_hold',
-    archived: 'completed',
-  };
-  return statusMap[status] || 'in_progress';
-}
-
-function mapProjectStatusForDisplay(status: string | ProjectStatus | PMDashboardProjectStatus): PMDashboardProjectStatus {
-  // 如果是後端的 ProjectStatus，轉換為前端的
-  if (status === 'in_progress' || status === 'completed' || status === 'cancelled' || status === 'on_hold') {
+function mapProjectStatusForDisplay(
+  status: string | ProjectStatus | PMDashboardProjectStatus,
+): PMDashboardProjectStatus {
+  if (
+    status === 'in_progress' ||
+    status === 'completed' ||
+    status === 'cancelled' ||
+    status === 'on_hold'
+  ) {
     return mapProjectStatus(status);
   }
-  // 如果已經是前端的 ProjectStatus，直接返回
   if (status === 'active' || status === 'draft' || status === 'archived') {
     return status;
   }
   return 'active';
 }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-  if (hours < 1) return '剛剛';
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return `${Math.floor(days / 7)}w ago`;
-}
-
 async function handleSubmit(): Promise<void> {
-  // 驗證必填欄位
   if (!form.name?.trim()) {
     alert('請填寫專案名稱');
     return;
@@ -368,23 +349,19 @@ async function handleSubmit(): Promise<void> {
     alert('請填寫專案代碼');
     return;
   }
-
   isSubmitting.value = true;
   try {
     if (editingProject.value) {
-      // 更新專案
-      const updateData: UpdateProjectRequest = {
+      await projectStore.updateProject(editingProject.value.code, {
         name: form.name,
         description: form.description || undefined,
         address: form.address || undefined,
         client: form.client || undefined,
         startDate: form.startDate || undefined,
         expectedEndDate: form.expectedEndDate || undefined,
-      };
-      await projectStore.updateProject(editingProject.value.code, updateData);
+      });
     } else {
-      // 新增專案
-      const createData: CreateProjectRequest = {
+      await projectStore.createProject({
         name: form.name,
         code: form.code,
         description: form.description || undefined,
@@ -392,11 +369,9 @@ async function handleSubmit(): Promise<void> {
         client: form.client || undefined,
         startDate: form.startDate || undefined,
         expectedEndDate: form.expectedEndDate || undefined,
-      };
-      await projectStore.createProject(createData);
+      });
     }
     handleCloseDialog();
-    // 重新載入專案列表
     await projectStore.fetchProjects();
   } catch (error) {
     alert(error instanceof Error ? error.message : '操作失敗');
@@ -418,20 +393,14 @@ function handleEditProject(project: ProjectListItem): void {
 }
 
 async function handleDeleteProject(project: ProjectListItem): Promise<void> {
-  if (!confirm(`確定要刪除專案「${project.name}」嗎？此操作無法復原。`)) {
-    return;
-  }
-
+  if (!confirm(`確定要刪除專案「${project.name}」嗎？此操作無法復原。`)) return;
   try {
     await projectStore.deleteProject(project.code);
-    // 重新載入專案列表
     await projectStore.fetchProjects();
-    // 如果刪除的是當前選中的專案，切換到第一個專案
-    if (props.selectedProjectId === project.id && projectStore.projects.length > 0) {
-      emit('select-project', projectStore.projects[0].id);
+    if (store.selectedProjectId === project.id && projectStore.projects.length > 0) {
+      store.setSelectedProjectId(projectStore.projects[0].id);
     } else if (projectStore.projects.length === 0) {
-      // 如果沒有專案了，清空選中狀態
-      emit('select-project', '');
+      store.setSelectedProjectId('');
     }
   } catch (error) {
     alert(error instanceof Error ? error.message : '刪除失敗');
@@ -439,13 +408,9 @@ async function handleDeleteProject(project: ProjectListItem): Promise<void> {
 }
 
 async function handleNewProjectClick(): Promise<void> {
-  // 點擊新增專案按鈕時，確保是新增模式
   editingProject.value = null;
-  // 先打開 Dialog
   showCreateDialog.value = true;
-  // 等待 Dialog 完全渲染後再重置表單
   await nextTick();
-  // 重置表單
   form.name = '';
   form.code = '';
   form.description = '';
@@ -458,7 +423,6 @@ async function handleNewProjectClick(): Promise<void> {
 function handleCloseDialog(): void {
   showCreateDialog.value = false;
   editingProject.value = null;
-  // 重置表單
   form.name = '';
   form.code = '';
   form.description = '';

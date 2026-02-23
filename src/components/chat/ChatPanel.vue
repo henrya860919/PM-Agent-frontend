@@ -3,8 +3,8 @@
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-border px-4 py-3">
       <div>
-        <h2 class="text-sm font-semibold text-foreground">AI Agent</h2>
-        <p class="text-xs text-muted-foreground">Ask anything about your project</p>
+        <h2 class="text-sm font-semibold text-foreground">{{ title }}</h2>
+        <p class="text-xs text-muted-foreground">{{ subtitle }}</p>
       </div>
       <div class="flex h-6 items-center gap-1.5 rounded-full bg-primary/10 px-2.5">
         <span class="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -18,16 +18,15 @@
         <div class="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
           <Sparkles class="h-6 w-6 text-primary" />
         </div>
-        <h3 class="mt-4 text-sm font-semibold text-foreground">How can I help?</h3>
+        <h3 class="mt-4 text-sm font-semibold text-foreground">{{ emptyTitle }}</h3>
         <p class="mt-1 max-w-[280px] text-center text-xs text-muted-foreground leading-relaxed">
-          Upload a transcript and I can generate PRDs, create UI prototypes, or answer questions
-          about your project.
+          {{ emptyDescription }}
         </p>
 
         <!-- Suggestion chips -->
-        <div class="mt-6 flex flex-wrap justify-center gap-2 px-4">
+        <div v-if="suggestionPrompts.length" class="mt-6 flex flex-wrap justify-center gap-2 px-4">
           <button
-            v-for="prompt in SUGGESTION_PROMPTS"
+            v-for="prompt in suggestionPrompts"
             :key="prompt"
             @click="handleSendMessage(prompt)"
             class="rounded-full border border-border bg-secondary px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
@@ -126,7 +125,7 @@
           v-model="input"
           @keydown="handleKeyDown"
           @input="handleInput"
-          placeholder="Ask your PM Agent..."
+          :placeholder="placeholder"
           rows="1"
           class="min-h-[40px] max-h-[120px] resize-none bg-secondary text-sm border-none focus-visible:ring-1 focus-visible:ring-ring placeholder:text-muted-foreground"
         />
@@ -165,6 +164,18 @@ import type { ChatMessage, ArtifactType } from '@/types/pm-dashboard';
 interface Props {
   messages: ChatMessage[];
   isLoading: boolean;
+  /** 標題，預設 "AI Agent" */
+  title?: string;
+  /** 副標題，預設 "Ask anything about your project" */
+  subtitle?: string;
+  /** 空狀態標題，預設 "How can I help?" */
+  emptyTitle?: string;
+  /** 空狀態說明 */
+  emptyDescription?: string;
+  /** 輸入框 placeholder */
+  placeholder?: string;
+  /** 建議問題列表，空陣列則不顯示 */
+  suggestionPrompts?: string[];
 }
 
 interface Emits {
@@ -172,20 +183,30 @@ interface Emits {
   (e: 'view-artifact', type: ArtifactType): void;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(
+  defineProps<Props>(),
+  {
+    title: 'AI Agent',
+    subtitle: 'Ask anything about your project',
+    emptyTitle: 'How can I help?',
+    emptyDescription:
+      'Upload a transcript and I can generate PRDs, create UI prototypes, or answer questions about your project.',
+    placeholder: 'Ask your PM Agent...',
+    suggestionPrompts: () => [
+      'Generate a PRD from my latest transcript',
+      'Create a React prototype for the checkout flow',
+      'Summarize key decisions from the stakeholder call',
+      'Identify risks and dependencies',
+    ],
+  },
+);
+
 const emit = defineEmits<Emits>();
 
 const input = ref<string>('');
 const copiedId = ref<string | null>(null);
 const messagesEndRef = ref<HTMLDivElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
-
-const SUGGESTION_PROMPTS = [
-  'Generate a PRD from my latest transcript',
-  'Create a React prototype for the checkout flow',
-  'Summarize key decisions from the stakeholder call',
-  'Identify risks and dependencies',
-];
 
 // Auto scroll to bottom when messages change
 watch(
@@ -205,6 +226,11 @@ function handleSend(): void {
   if (textareaRef.value) {
     textareaRef.value.style.height = 'auto';
   }
+}
+
+function handleSendMessage(message: string): void {
+  if (props.isLoading) return;
+  emit('send-message', message);
 }
 
 function handleKeyDown(e: KeyboardEvent): void {

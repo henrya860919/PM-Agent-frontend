@@ -60,3 +60,21 @@ export interface LogicFlag {
   message: string;
   source: string;
 }
+
+/** 單次上傳並完成分析後的紀錄（用於列表管理） */
+export interface AnalysisRecord {
+  id: string;
+  fileId: string;
+  fileName: string;
+  transcript: string;
+  logicFlags: LogicFlag[];
+  /** AI 分析摘要 */
+  summary?: string | null;
+  /** 關鍵決策 */
+  keyDecisions?: unknown[] | null;
+  /** 風險 */
+  risks?: unknown[] | null;
+  /** 依賴 */
+  dependencies?: unknown[] | null;
+  createdAt: string; // ISO date string
+}

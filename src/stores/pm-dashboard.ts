@@ -7,8 +7,10 @@ import type {
   ChatMessage,
   UploadedFile,
   LogicFlag,
+  AnalysisRecord,
   ProjectStatus as PMDashboardProjectStatus,
 } from '@/types/pm-dashboard';
+import type { FileRecord } from '@/types/file';
 import { useProjectStore } from './project';
 
 export const usePMDashboardStore = defineStore('pm-dashboard', () => {
@@ -21,6 +23,10 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
   const files = ref<UploadedFile[]>([]);
   const transcript = ref<string>('');
   const logicFlags = ref<LogicFlag[]>([]);
+  /** 每次完成分析的音檔紀錄列表（用於左側列表管理） */
+  const analysisRecords = ref<AnalysisRecord[]>([]);
+  /** 目前選中的紀錄 ID，對應的 transcript / logicFlags 會顯示在右側 */
+  const selectedRecordId = ref<string>('');
 
   const projectStore = useProjectStore();
 
@@ -121,6 +127,79 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     transcript.value = text;
   }
 
+  function addAnalysisRecord(record: AnalysisRecord): void {
+    analysisRecords.value.unshift(record);
+    selectedRecordId.value = record.id;
+    transcript.value = record.transcript;
+    logicFlags.value = record.logicFlags;
+  }
+
+  /** 從後端檔案列表設定分析記錄（僅已分析 hasAnalyzed 的檔案） */
+  function setAnalysisRecordsFromApi(files: FileRecord[]): void {
+    analysisRecords.value = files.map((f) => ({
+      id: f.id,
+      fileId: f.id,
+      fileName: f.originalFilename,
+      transcript: '',
+      logicFlags: [],
+      summary: null,
+      keyDecisions: null,
+      risks: null,
+      dependencies: null,
+      createdAt: f.createdAt,
+    }));
+  }
+
+  /** 更新單筆分析記錄的詳情（轉錄、分析結果等） */
+  function updateAnalysisRecordDetail(
+    id: string,
+    detail: {
+      transcript: string;
+      logicFlags: LogicFlag[];
+      summary?: string | null;
+      keyDecisions?: unknown[] | null;
+      risks?: unknown[] | null;
+      dependencies?: unknown[] | null;
+    },
+  ): void {
+    const record = analysisRecords.value.find((r) => r.id === id);
+    if (record) {
+      record.transcript = detail.transcript;
+      record.logicFlags = detail.logicFlags;
+      record.summary = detail.summary ?? null;
+      record.keyDecisions = detail.keyDecisions ?? null;
+      record.risks = detail.risks ?? null;
+      record.dependencies = detail.dependencies ?? null;
+      if (selectedRecordId.value === id) {
+        transcript.value = detail.transcript;
+        logicFlags.value = detail.logicFlags;
+      }
+    }
+  }
+
+  function selectRecord(id: string): void {
+    const record = analysisRecords.value.find((r) => r.id === id);
+    if (record) {
+      selectedRecordId.value = id;
+      transcript.value = record.transcript;
+      logicFlags.value = record.logicFlags;
+    }
+  }
+
+  function removeAnalysisRecord(id: string): void {
+    analysisRecords.value = analysisRecords.value.filter((r) => r.id !== id);
+    if (selectedRecordId.value === id) {
+      const next = analysisRecords.value[0];
+      if (next) {
+        selectRecord(next.id);
+      } else {
+        selectedRecordId.value = '';
+        transcript.value = '';
+        logicFlags.value = [];
+      }
+    }
+  }
+
   return {
     // State
     selectedProjectId,
@@ -131,6 +210,8 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     files,
     transcript,
     logicFlags,
+    analysisRecords,
+    selectedRecordId,
     projects,
     // Computed
     selectedProject,
@@ -145,6 +226,11 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     removeFile,
     setLogicFlags,
     setTranscript,
+    addAnalysisRecord,
+    setAnalysisRecordsFromApi,
+    updateAnalysisRecordDetail,
+    selectRecord,
+    removeAnalysisRecord,
     initializeProjects,
   };
 });

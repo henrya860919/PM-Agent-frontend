@@ -54,6 +54,8 @@ export const fileApi = {
     search?: string;
     page?: number;
     limit?: number;
+    /** 是否已有分析：只顯示已分析、只顯示未分析、或全部 */
+    hasAnalyzed?: 'all' | 'yes' | 'no';
   }): Promise<FileListResponse> {
     const { data } = await apiClient.get<{ success: boolean; data: FileListResponse }>('/files', {
       params,
