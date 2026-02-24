@@ -25,15 +25,27 @@
             @click="handleSelectRecord(record.id)"
             :class="
               cn(
-                'w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors',
+                'w-full flex items-start gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors',
                 store.selectedRecordId === record.id
                   ? 'bg-primary text-primary-foreground'
                   : 'text-foreground hover:bg-muted',
               )
             "
           >
-            <FileAudio class="h-3.5 w-3.5 shrink-0" />
-            <span class="min-w-0 truncate flex-1">{{ record.fileName }}</span>
+            <FileAudio class="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <div class="min-w-0 flex-1 flex flex-col gap-0.5">
+              <span class="truncate font-medium">{{ record.fileName }}</span>
+              <span
+                :class="
+                  store.selectedRecordId === record.id
+                    ? 'text-primary-foreground/80'
+                    : 'text-muted-foreground'
+                "
+                class="text-[10px]"
+              >
+                上傳時間 {{ formatRecordDate(record.createdAt) }}
+              </span>
+            </div>
           </button>
           <p
             v-if="store.analysisRecords.length === 0"
@@ -62,7 +74,7 @@
                 <section>
                   <div class="flex items-center justify-between mb-3">
                     <div>
-                      <h3 class="text-sm font-semibold text-foreground">Transcript</h3>
+                      <h3 class="text-sm font-semibold text-foreground">逐字稿</h3>
                       <p class="text-xs text-muted-foreground">{{ selectedRecord.fileName }}</p>
                     </div>
                     <Button
@@ -71,15 +83,26 @@
                       @click="showTranscript = !showTranscript"
                       class="text-xs h-7 text-muted-foreground hover:text-foreground"
                     >
-                      {{ showTranscript ? 'Collapse' : 'Expand' }}
+                      {{ showTranscript ? '收合' : '展開' }}
                     </Button>
                   </div>
-                  <Textarea
-                    v-if="showTranscript"
-                    :value="selectedRecord.transcript || '無轉錄內容'"
-                    readonly
-                    class="min-h-[180px] resize-none bg-secondary text-xs font-mono leading-relaxed border-none text-secondary-foreground"
-                  />
+                  <div v-if="showTranscript" class="space-y-2">
+                    <template v-if="selectedRecord.segments?.length">
+                      <div
+                        v-for="(seg, idx) in selectedRecord.segments"
+                        :key="idx"
+                        class="flex gap-3 rounded-md bg-secondary px-3 py-2 text-left"
+                      >
+                        <span class="shrink-0 text-[11px] font-mono text-muted-foreground tabular-nums">
+                          {{ formatSegmentTime(seg.start) }} – {{ formatSegmentTime(seg.end) }}
+                        </span>
+                        <span class="min-w-0 flex-1 text-xs leading-relaxed">{{ seg.text }}</span>
+                      </div>
+                    </template>
+                    <p v-else class="rounded-md bg-secondary px-3 py-4 text-xs text-muted-foreground">
+                      {{ selectedRecord.transcript || '無轉錄內容' }}
+                    </p>
+                  </div>
                 </section>
                 <section>
                   <div class="flex items-center justify-between mb-3">
@@ -335,7 +358,6 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/Badge';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ResizableHandle,
@@ -349,11 +371,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { usePMDashboardStore } from '@/stores/pm-dashboard';
-import { fileApi } from '@/services/endpoints/file';
+import { useWorkspaceStore } from '@/stores/workspace';
+import { fileRecordsApi } from '@/services/endpoints/file-records';
 import { devApi } from '@/services/endpoints/dev';
 import { uploadFile } from '@/utils/upload';
-import { FILE_BUSINESS_TYPE } from '@/constants/file';
+import { formatRecordDate, formatSegmentTime } from '@/utils/format';
+import { FILE_BUSINESS_TYPE, HAS_ANALYZED } from '@/constants/file';
+import {
+  LOGIC_FLAG_CATEGORY_LABELS,
+  LOGIC_FLAG_SEVERITY_BADGE_STYLES,
+  LOGIC_FLAG_SEVERITY_BOX_STYLES,
+} from '@/constants/logic-flag';
+import { MAX_POLL_ATTEMPTS, POLL_INTERVAL_MS } from '@/constants/workspace';
 import type {
   ChatMessage,
   UploadedFile,
@@ -363,7 +392,7 @@ import type {
   AnalysisRecord as AnalysisRecordType,
 } from '@/types/pm-dashboard';
 
-const store = usePMDashboardStore();
+const store = useWorkspaceStore();
 
 function hasAnalysisContent(record: AnalysisRecordType): boolean {
   return !!(
@@ -399,16 +428,51 @@ const selectedRecord = computed(() =>
   store.analysisRecords.find((r) => r.id === store.selectedRecordId),
 );
 
-/** 從後端載入「已分析」的檔案列表作為分析記錄 */
+/** 背景預取單筆紀錄的轉錄與分析，有真實資料才寫入 store */
+async function prefetchRecordDetail(fileId: string): Promise<void> {
+  try {
+    const [transcriptRes, analysisRes] = await Promise.all([
+      fileRecordsApi.getTranscript(fileId),
+      fileRecordsApi.getAnalysis(fileId),
+    ]);
+    const transcriptText = transcriptRes?.transcript ?? '';
+    const segments = transcriptRes?.segments ?? null;
+    const flags: LogicFlag[] =
+      analysisRes?.logicFlags?.length ?
+        analysisRes.logicFlags.map((f) => ({
+          id: f.id,
+          category: f.category as LogicFlag['category'],
+          severity: f.severity as LogicFlag['severity'],
+          message: f.message,
+          source: f.source,
+        }))
+      : [];
+    store.updateAnalysisRecordDetail(fileId, {
+      transcript: transcriptText,
+      segments,
+      logicFlags: flags,
+      summary: analysisRes?.summary ?? null,
+      keyDecisions: analysisRes?.keyDecisions ?? null,
+      risks: analysisRes?.risks ?? null,
+      dependencies: analysisRes?.dependencies ?? null,
+    });
+  } catch {
+    // 單筆失敗不影響其他筆，不寫入假資料
+  }
+}
+
+/** 從後端載入「已分析」的檔案列表作為分析記錄，並背景預取每筆真實轉錄／分析 */
 async function fetchAnalysisRecords(): Promise<void> {
   try {
-    const result = await fileApi.list({
-      hasAnalyzed: 'yes',
+    const result = await fileRecordsApi.list({
+      hasAnalyzed: HAS_ANALYZED.YES,
       projectId: store.selectedProjectId || undefined,
       limit: 100,
       page: 1,
     });
     store.setAnalysisRecordsFromApi(result.files);
+    // 背景預取每筆的真實資料，有回傳才更新（不寫入假資料）
+    void Promise.allSettled(result.files.map((f) => prefetchRecordDetail(f.id)));
   } catch (err) {
     console.error('Failed to fetch analysis records:', err);
   }
@@ -425,10 +489,11 @@ async function handleSelectRecord(id: string): Promise<void> {
   recordDetailLoading.value = true;
   try {
     const [transcriptRes, analysisRes] = await Promise.all([
-      fileApi.getTranscript(id),
-      fileApi.getAnalysis(id),
+      fileRecordsApi.getTranscript(id),
+      fileRecordsApi.getAnalysis(id),
     ]);
     const transcriptText = transcriptRes?.transcript ?? '';
+    const segments = transcriptRes?.segments ?? null;
     const flags: LogicFlag[] = analysisRes?.logicFlags?.length
       ? analysisRes.logicFlags.map((f) => ({
           id: f.id,
@@ -440,6 +505,7 @@ async function handleSelectRecord(id: string): Promise<void> {
       : [];
     store.updateAnalysisRecordDetail(id, {
       transcript: transcriptText,
+      segments,
       logicFlags: flags,
       summary: analysisRes?.summary ?? null,
       keyDecisions: analysisRes?.keyDecisions ?? null,
@@ -460,30 +526,11 @@ const categoryIcons: Record<LogicFlagCategory, unknown> = {
   'data-flow': AlertTriangle,
 };
 
-const categoryLabels: Record<LogicFlagCategory, string> = {
-  permissions: 'Permissions',
-  'import-export': 'Import/Export',
-  hierarchy: 'Hierarchy',
-  'data-flow': 'Data Flow',
-};
-
-const severityStyles: Record<LogicFlagSeverity, string> = {
-  critical: 'border-destructive/30 bg-destructive/5 text-destructive',
-  warning: 'border-chart-3/30 bg-chart-3/5 text-chart-3',
-  info: 'border-chart-2/30 bg-chart-2/5 text-chart-2',
-};
-
-const severityBadge: Record<LogicFlagSeverity, string> = {
-  critical: 'bg-destructive/10 text-destructive border-destructive/20',
-  warning: 'bg-chart-3/10 text-chart-3 border-chart-3/20',
-  info: 'bg-chart-2/10 text-chart-2 border-chart-2/20',
-};
+const categoryLabels = LOGIC_FLAG_CATEGORY_LABELS;
+const severityStyles = LOGIC_FLAG_SEVERITY_BOX_STYLES;
+const severityBadge = LOGIC_FLAG_SEVERITY_BADGE_STYLES;
 
 const files = computed(() => store.files);
-
-const POLL_INTERVAL_MS = 2500;
-const MAX_POLL_ATTEMPTS = 120;
-
 
 onMounted(async () => {
   await store.initializeProjects();
@@ -534,16 +581,17 @@ async function pollForProcessing(
       return;
     }
     try {
-      const status = await fileApi.getProcessingStatus(backendFileId);
+      const status = await fileRecordsApi.getProcessingStatus(backendFileId);
       const stepLabel = getProcessingStepLabel(status);
       store.updateFile(frontendFileId, { processingStep: stepLabel });
 
       if (status.overall === 'completed') {
         const [transcriptRes, analysisRes] = await Promise.all([
-          fileApi.getTranscript(backendFileId),
-          fileApi.getAnalysis(backendFileId),
+          fileRecordsApi.getTranscript(backendFileId),
+          fileRecordsApi.getAnalysis(backendFileId),
         ]);
         const transcriptText = transcriptRes?.transcript ?? '';
+        const segments = transcriptRes?.segments ?? null;
         const flags: LogicFlag[] = analysisRes?.logicFlags?.length
           ? analysisRes.logicFlags.map((f) => ({
               id: f.id,
@@ -559,6 +607,7 @@ async function pollForProcessing(
         if (exists) {
           store.updateAnalysisRecordDetail(backendFileId, {
             transcript: transcriptText,
+            segments,
             logicFlags: flags,
             summary: analysisRes?.summary ?? null,
             keyDecisions: analysisRes?.keyDecisions ?? null,
@@ -571,6 +620,7 @@ async function pollForProcessing(
             fileId: backendFileId,
             fileName,
             transcript: transcriptText,
+            segments,
             logicFlags: flags,
             summary: analysisRes?.summary ?? null,
             keyDecisions: analysisRes?.keyDecisions ?? null,
@@ -596,7 +646,7 @@ async function pollForProcessing(
         });
         if (status.transcriptStatus === 'completed') {
           try {
-            const transcriptRes = await fileApi.getTranscript(backendFileId);
+            const transcriptRes = await fileRecordsApi.getTranscript(backendFileId);
             if (transcriptRes?.transcript) {
               store.setTranscript(transcriptRes.transcript);
             }

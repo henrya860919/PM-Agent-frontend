@@ -61,12 +61,16 @@ export interface LogicFlag {
   source: string;
 }
 
+import type { TranscriptSegment } from '@/types/file';
+
 /** 單次上傳並完成分析後的紀錄（用於列表管理） */
 export interface AnalysisRecord {
   id: string;
   fileId: string;
   fileName: string;
   transcript: string;
+  /** 逐字稿時間軸區間，有則顯示 segments，無則 fallback 顯示 transcript */
+  segments?: TranscriptSegment[] | null;
   logicFlags: LogicFlag[];
   /** AI 分析摘要 */
   summary?: string | null;

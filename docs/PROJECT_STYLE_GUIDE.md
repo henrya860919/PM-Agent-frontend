@@ -87,8 +87,9 @@ src/
 | 頁面元件 | PascalCase，結尾 `View.vue` | `WorkspaceView.vue`、`DetailedSpecsView.vue` |
 | 一般元件 | PascalCase | `ChatPanel.vue`、`AppSidebar.vue` |
 | UI 元件資料夾 | 小寫（與 import 路徑一致） | `button`、`dialog`、`input` |
-| Store | 小寫 + `use` + PascalCase + `Store` | `usePMDashboardStore`、`pm-dashboard.ts` |
-| 路由 name | kebab-case | `workspace`、`file-records`、`feature-list` |
+| Store | **依對應 View 命名**：檔名 kebab，`useXxxStore` | `workspace.ts`、`useWorkspaceStore`（對應 WorkspaceView） |
+| Endpoint | **依對應 View 命名**：檔名 kebab，export `xxxApi` | `file-records.ts`、`fileRecordsApi`（對應 FileRecordsView） |
+| 路由 name | kebab-case，與 view 對齊 | `workspace`、`file-records`、`feature-list` |
 | 路由 path | kebab-case，可與 name 一致 | `/workspace`、`/file-records` |
 
 ---
@@ -112,8 +113,21 @@ src/
 ## 7. API 與服務
 
 - 請求客戶端封裝在 `src/services/`（例如 `client.ts`）。
-- 依領域拆分 endpoints（例如 `endpoints/file.ts`、`endpoints/dev.ts`）。
+- Endpoint 檔名與 export 依對應 View 命名（如 `file-records.ts`、`fileRecordsApi` 對應 FileRecordsView）。
 - 型別定義放在 `src/types/`，與 API 回應對齊。
+
+---
+
+## 7.1 常數（src/constants/）
+
+- 路由／視圖：route id、path、label → `constants/routes.ts`，供 router、Sidebar、Header 共用。
+- 業務選項與對應表：狀態對應、顏色、標籤、篩選選項 → 依領域分檔（`project.ts`、`file.ts`、`logic-flag.ts`、`workspace.ts`）。
+- 魔術字串與數字（輪詢間隔、API 參數等）抽成常數，從 `@/constants/xxx` 引用。
+
+## 7.2 Utils 與 Composables
+
+- **utils/**：純函式（輸入→輸出，無 ref、無 Vue API）。例：日期／時間格式化 → `utils/format.ts`。
+- **composables/**：有狀態或使用 Vue 生命週期的邏輯。
 
 ---
 

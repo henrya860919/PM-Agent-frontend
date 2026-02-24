@@ -1,6 +1,6 @@
 // src/utils/upload.ts
 import { FILE_BUSINESS_TYPE } from '@/constants/file';
-import { fileApi } from '@/services/endpoints/file';
+import { fileRecordsApi } from '@/services/endpoints/file-records';
 import type { FileUploadResponse } from '@/types/file';
 
 export interface UploadFileOptions {
@@ -28,7 +28,7 @@ export async function uploadFile(options: UploadFileOptions): Promise<FileUpload
   }
 
   try {
-    const result = await fileApi.upload(file, {
+    const result = await fileRecordsApi.upload(file, {
       businessType,
       businessId,
       projectId,

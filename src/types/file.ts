@@ -44,10 +44,19 @@ export type FileProcessingStatusResponse = {
   analysisErrorMessage?: string | null;
 };
 
+/** 轉錄時間軸區間（後端與前端一致） */
+export type TranscriptSegment = {
+  start: number;
+  end: number;
+  text: string;
+};
+
 export type FileTranscriptResponse = {
   id: string;
   fileId: string;
   transcript: string;
+  /** 時間軸區間列表，供逐字稿依時間顯示 */
+  segments: TranscriptSegment[] | null;
   language: string | null;
   duration: number | null;
   wordCount: number | null;

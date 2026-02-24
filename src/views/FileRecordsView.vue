@@ -194,13 +194,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import apiClient from '@/services/client';
-import { fileApi } from '@/services/endpoints/file';
+import { fileRecordsApi } from '@/services/endpoints/file-records';
 import type { FileRecord } from '@/types/file';
-import { usePMDashboardStore } from '@/stores/pm-dashboard';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { uploadFile } from '@/utils/upload';
-import { FILE_BUSINESS_TYPE } from '@/constants/file';
+import { FILE_BUSINESS_TYPE, FILE_TYPE_FILTERS, type FileTypeFilter } from '@/constants/file';
 
-const store = usePMDashboardStore();
+const store = useWorkspaceStore();
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
@@ -210,15 +210,8 @@ const total = ref(0);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 const searchQuery = ref('');
-const typeFilter = ref<'all' | 'audio' | 'transcript' | 'document' | 'image'>('all');
-
-const typeFilters: Array<'all' | 'audio' | 'transcript' | 'document' | 'image'> = [
-  'all',
-  'audio',
-  'transcript',
-  'document',
-  'image',
-];
+const typeFilter = ref<FileTypeFilter>('all');
+const typeFilters = FILE_TYPE_FILTERS;
 
 function getFileType(file: FileRecord): string {
   if (file.mimeType.startsWith('audio/')) return 'audio';
@@ -278,7 +271,7 @@ async function loadFiles() {
   isLoading.value = true;
   error.value = null;
   try {
-    const result = await fileApi.list({
+    const result = await fileRecordsApi.list({
       projectId: store.selectedProjectId || undefined,
       type: typeFilter.value,
       search: searchQuery.value || undefined,
@@ -350,7 +343,7 @@ async function handleDelete(file: FileRecord) {
   }
   deletingId.value = file.id;
   try {
-    await fileApi.delete(file.id);
+    await fileRecordsApi.delete(file.id);
     await loadFiles();
   } catch (err) {
     console.error('Delete failed:', err);

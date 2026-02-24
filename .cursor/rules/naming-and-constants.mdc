@@ -1,0 +1,30 @@
+---
+description: Store / Endpoint 命名、常數與 utils 放置、資料顯示慣例
+alwaysApply: true
+---
+
+# 命名、常數與資料慣例
+
+## Store 與 Endpoint 命名（依 View 檔名）
+
+- **Store**：與對應的 View 一致。檔名 kebab，export `useXxxStore`，store id 與檔名同。
+  - 例：`WorkspaceView.vue` → `stores/workspace.ts`、`useWorkspaceStore`、id `'workspace'`。
+- **Endpoint**：與對應的 View 一致。檔名 kebab，export `xxxApi`。
+  - 例：`FileRecordsView.vue` → `services/endpoints/file-records.ts`、`fileRecordsApi`。
+- 無對應 View 的資源（如 project、dev）可維持資源名（`project.ts`、`projectApi`）。
+
+## 常數（src/constants/）
+
+- **路由 / 視圖**：route id、path、label → `constants/routes.ts`（router、Sidebar、Header 共用）。
+- **業務選項與對應表**：狀態對應、顏色、標籤、篩選選項 → 依領域分檔（`project.ts`、`file.ts`、`logic-flag.ts`、`workspace.ts`）。
+- 魔術字串、數字（輪詢間隔、逾時次數、API 參數如 hasAnalyzed）一律抽成常數並從 `@/constants/xxx` 引用。
+
+## Utils 與 Composables
+
+- **utils/**：純函式（輸入→輸出，無 ref/reactive、無 Vue 生命週期）。例：`formatSegmentTime`、`formatRecordDate` → `utils/format.ts`。
+- **composables/**：有狀態（ref/computed）或使用 Vue API（onMounted、watch）的邏輯。
+
+## 資料顯示
+
+- 列表資料：**有真實 API 回傳才寫入 store 並顯示**；不寫假資料填滿。可背景預取（如 Promise.allSettled）後再更新。
+- 逐字稿：**有 segments（時間區間 + 文字）時以時間軸顯示**；無 segments 時 fallback 顯示整段 transcript 文字。

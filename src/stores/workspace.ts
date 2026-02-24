@@ -8,12 +8,12 @@ import type {
   UploadedFile,
   LogicFlag,
   AnalysisRecord,
-  ProjectStatus as PMDashboardProjectStatus,
 } from '@/types/pm-dashboard';
 import type { FileRecord } from '@/types/file';
+import { PROJECT_STATUS_BACKEND_TO_UI, PROJECT_STATUS_DEFAULT_UI } from '@/constants/project';
 import { useProjectStore } from './project';
 
-export const usePMDashboardStore = defineStore('pm-dashboard', () => {
+export const useWorkspaceStore = defineStore('workspace', () => {
   // State
   const selectedProjectId = ref<string>('');
   const activeView = ref<ProjectView>('workspace');
@@ -34,13 +34,7 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
   const projects = computed<Project[]>(() => {
     return projectStore.projects.map((p) => {
       // 轉換後端狀態為 dashboard 狀態
-      const statusMap: Record<string, PMDashboardProjectStatus> = {
-        in_progress: 'active',
-        completed: 'archived',
-        cancelled: 'archived',
-        on_hold: 'draft',
-      };
-      const status = statusMap[p.status] || 'active';
+      const status = PROJECT_STATUS_BACKEND_TO_UI[p.status] ?? PROJECT_STATUS_DEFAULT_UI;
 
       // 格式化日期
       const date = new Date(p.createdAt);
@@ -141,6 +135,7 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
       fileId: f.id,
       fileName: f.originalFilename,
       transcript: '',
+      segments: null,
       logicFlags: [],
       summary: null,
       keyDecisions: null,
@@ -150,11 +145,12 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     }));
   }
 
-  /** 更新單筆分析記錄的詳情（轉錄、分析結果等） */
+  /** 更新單筆分析記錄的詳情（轉錄／時間軸、分析結果等） */
   function updateAnalysisRecordDetail(
     id: string,
     detail: {
       transcript: string;
+      segments?: import('@/types/file').TranscriptSegment[] | null;
       logicFlags: LogicFlag[];
       summary?: string | null;
       keyDecisions?: unknown[] | null;
@@ -165,6 +161,7 @@ export const usePMDashboardStore = defineStore('pm-dashboard', () => {
     const record = analysisRecords.value.find((r) => r.id === id);
     if (record) {
       record.transcript = detail.transcript;
+      record.segments = detail.segments ?? null;
       record.logicFlags = detail.logicFlags;
       record.summary = detail.summary ?? null;
       record.keyDecisions = detail.keyDecisions ?? null;

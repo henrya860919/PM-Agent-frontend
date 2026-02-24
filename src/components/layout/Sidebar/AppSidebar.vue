@@ -27,13 +27,13 @@
     <div class="px-3 pb-2">
       <Button
         variant="outline"
-        size="sm"
+        size="default"
         class="w-full justify-start gap-2 border-dashed border-border bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground text-xs h-8"
         @click="handleNewProjectClick"
-      >
-        <Plus class="h-3.5 w-3.5" />
-        New Project
-      </Button>
+    >
+      <Plus class="h-3.5 w-3.5" />
+      New Project
+    </Button>
       <Dialog v-model="showCreateDialog">
         <DialogContent>
           <DialogHeader>
@@ -218,7 +218,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { usePMDashboardStore } from '@/stores/pm-dashboard';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { useProjectStore } from '@/stores/project';
 import type { ProjectStatus as PMDashboardProjectStatus } from '@/types/pm-dashboard';
 import type {
@@ -227,9 +227,15 @@ import type {
   UpdateProjectRequest,
   ProjectStatus,
 } from '@/types/project';
+import { PROJECT_VIEW_ROUTES } from '@/constants/routes';
+import {
+  PROJECT_STATUS_BACKEND_TO_UI,
+  PROJECT_STATUS_COLORS,
+  PROJECT_STATUS_DEFAULT_UI,
+} from '@/constants/project';
 
 const route = useRoute();
-const store = usePMDashboardStore();
+const store = useWorkspaceStore();
 const projectStore = useProjectStore();
 
 const searchQuery = ref<string>('');
@@ -247,22 +253,18 @@ const form = reactive<CreateProjectRequest & UpdateProjectRequest>({
   expectedEndDate: '',
 });
 
-/** 每個專案展開後底下的功能，對應 src/views 的頁面 */
+/** 每個專案展開後底下的功能，對應 src/views；icon 依 id 對應 */
 const PROJECT_VIEW_ITEMS = [
-  { id: 'workspace', path: '/workspace', label: 'Workspace', icon: LayoutDashboard },
-  { id: 'file-records', path: '/file-records', label: 'File Records', icon: Archive },
-  { id: 'feature-list', path: '/feature-list', label: 'Feature List', icon: ListChecks },
-  { id: 'detailed-specs', path: '/detailed-specs', label: 'Detailed Specs', icon: Layers },
+  { ...PROJECT_VIEW_ROUTES[0], icon: LayoutDashboard },
+  { ...PROJECT_VIEW_ROUTES[1], icon: Archive },
+  { ...PROJECT_VIEW_ROUTES[2], icon: ListChecks },
+  { ...PROJECT_VIEW_ROUTES[3], icon: Layers },
 ] as const;
 
 /** 已展開的專案 ID 集合 */
 const expandedProjects = ref<Set<string>>(new Set());
 
-const statusColors: Record<PMDashboardProjectStatus, string> = {
-  active: 'bg-primary',
-  draft: 'bg-muted-foreground',
-  archived: 'bg-muted-foreground/40',
-};
+const statusColors = PROJECT_STATUS_COLORS;
 
 function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(path + '/');
@@ -314,30 +316,19 @@ function handleViewClick(projectId: string): void {
 }
 
 function mapProjectStatus(status: string): PMDashboardProjectStatus {
-  const statusMap: Record<string, PMDashboardProjectStatus> = {
-    in_progress: 'active',
-    completed: 'archived',
-    cancelled: 'archived',
-    on_hold: 'draft',
-  };
-  return statusMap[status] || 'active';
+  return PROJECT_STATUS_BACKEND_TO_UI[status] ?? PROJECT_STATUS_DEFAULT_UI;
 }
 
 function mapProjectStatusForDisplay(
   status: string | ProjectStatus | PMDashboardProjectStatus,
 ): PMDashboardProjectStatus {
-  if (
-    status === 'in_progress' ||
-    status === 'completed' ||
-    status === 'cancelled' ||
-    status === 'on_hold'
-  ) {
-    return mapProjectStatus(status);
+  if (status in PROJECT_STATUS_BACKEND_TO_UI) {
+    return mapProjectStatus(status as string);
   }
   if (status === 'active' || status === 'draft' || status === 'archived') {
     return status;
   }
-  return 'active';
+  return PROJECT_STATUS_DEFAULT_UI;
 }
 
 async function handleSubmit(): Promise<void> {
