@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // 建立 axios 實例
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api',
   timeout: 30000, // 30 秒超時
   headers: {
     'Content-Type': 'application/json',
@@ -17,6 +17,10 @@ apiClient.interceptors.request.use(
     // 開發環境：自動加入 x-user-id header
     if (import.meta.env.DEV && !config.headers['x-user-id']) {
       config.headers['x-user-id'] = '00000000-0000-0000-0000-000000000001';
+    }
+    // 上傳 FormData 時不可帶 Content-Type: application/json，讓 axios 自動設 multipart/form-data + boundary
+    if (config.data instanceof FormData && config.headers) {
+      delete config.headers['Content-Type'];
     }
     return config;
   },

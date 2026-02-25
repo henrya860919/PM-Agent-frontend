@@ -8,9 +8,24 @@ import type {
 } from '@/types/file';
 import apiClient from '../client';
 
+/** 切片上傳：初始化回傳 */
+export type ChunkedInitResponse = {
+  uploadId: string;
+  chunkSize: number;
+};
+
+/** 切片上傳：狀態 */
+export type ChunkedStatusResponse = {
+  uploadId: string;
+  totalChunks: number;
+  uploadedChunks: number;
+  totalSize: number;
+  complete: boolean;
+};
+
 export const fileRecordsApi = {
   /**
-   * 上傳檔案
+   * 上傳檔案（傳統單次，適合 < 5MB）
    * POST /files/upload
    */
   async upload(
@@ -41,6 +56,71 @@ export const fileRecordsApi = {
       },
     );
     return data.data;
+  },
+
+  /**
+   * 切片上傳：初始化
+   * POST /files/chunked/init
+   */
+  async chunkedInit(params: {
+    filename: string;
+    totalSize: number;
+    mimeType: string;
+  }): Promise<ChunkedInitResponse> {
+    const { data } = await apiClient.post<{ success: boolean; data: ChunkedInitResponse }>(
+      '/files/chunked/init',
+      params,
+    );
+    return data.data;
+  },
+
+  /**
+   * 切片上傳：上傳單一切片
+   * POST /files/chunked/upload/:uploadId
+   */
+  async uploadChunk(
+    uploadId: string,
+    chunkIndex: number,
+    chunkBlob: Blob,
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('chunk', chunkBlob);
+    formData.append('chunkIndex', String(chunkIndex));
+    await apiClient.post(`/files/chunked/upload/${uploadId}`, formData);
+  },
+
+  /**
+   * 切片上傳：合併並建立檔案記錄
+   * POST /files/chunked/merge/:uploadId
+   */
+  async chunkedMerge(
+    uploadId: string,
+    options: {
+      businessType: string;
+      businessId?: string;
+      projectId?: string;
+    },
+  ): Promise<FileUploadResponse> {
+    const { data } = await apiClient.post<{ success: boolean; data: FileUploadResponse }>(
+      `/files/chunked/merge/${uploadId}`,
+      options,
+    );
+    return data.data;
+  },
+
+  /**
+   * 切片上傳：查詢狀態
+   * GET /files/chunked/status/:uploadId
+   */
+  async getChunkedStatus(uploadId: string): Promise<ChunkedStatusResponse | null> {
+    try {
+      const { data } = await apiClient.get<{ success: boolean; data: ChunkedStatusResponse }>(
+        `/files/chunked/status/${uploadId}`,
+      );
+      return data.data;
+    } catch {
+      return null;
+    }
   },
 
   /**

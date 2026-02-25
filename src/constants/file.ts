@@ -16,3 +16,6 @@ export const HAS_ANALYZED = {
   YES: 'yes',
   NO: 'no',
 } as const;
+
+/** 超過此大小（5MB）即走切片上傳，與後端 CHUNKED_UPLOAD_THRESHOLD_BYTES 一致 */
+export const CHUNKED_UPLOAD_THRESHOLD_BYTES = 5 * 1024 * 1024;
