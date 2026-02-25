@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     host: true,
-    port: 5173,
+    port: 5178,
     strictPort: true,
     open: false,
     hmr: true,
@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => ({
   },
   preview: {
     host: true,
-    port: 5173,
+    port: 5178,
     strictPort: true,
     allowedHosts: true,
   },
